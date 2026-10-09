@@ -46,3 +46,18 @@ def replace_assignments(student_id: int, payload: AssignmentIn, db: Db):
     db.add_all([Assignment(student_id=student_id, course_id=course_id) for course_id in payload.course_ids])
     db.commit()
     return {"message": "Assignments updated", "assigned": len(payload.course_ids)}
+
+
+@router.delete("/{student_id}/{course_id}")
+def remove_assignment(student_id: int, course_id: int, db: Db):
+    student = db.get(Student, student_id)
+    assignment = db.scalar(select(Assignment).where(Assignment.student_id == student_id, Assignment.course_id == course_id))
+    if not student or not assignment:
+        raise HTTPException(404, "Assignment not found")
+    if student.date_sheet_saved:
+        raise HTTPException(409, "Assignments are locked after date-sheet save")
+    count = db.scalar(select(func.count(Assignment.id)).where(Assignment.student_id == student_id)) or 0
+    validate_count(count - 1)
+    db.delete(assignment)
+    db.commit()
+    return {"message": "Assignment removed"}

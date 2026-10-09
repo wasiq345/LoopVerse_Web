@@ -53,6 +53,22 @@ def create_branch(payload: BranchIn, db: Db):
     return branch
 
 
+@router.put("/branches/{branch_id}")
+def update_branch(branch_id: int, payload: BranchIn, db: Db):
+    branch = db.get(Branch, branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+    for key, value in payload.model_dump().items():
+        setattr(branch, key, value)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(409, "Branch code already exists")
+    db.refresh(branch)
+    return branch
+
+
 @router.delete("/branches/{branch_id}")
 def delete_branch(branch_id: int, db: Db):
     branch = db.get(Branch, branch_id)
@@ -79,6 +95,22 @@ def list_courses(db: Db, paging: Annotated[tuple[int, int], Depends(pagination)]
 def create_course(payload: CourseIn, db: Db):
     course = Course(**payload.model_dump())
     db.add(course)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(409, "Course code already exists")
+    db.refresh(course)
+    return course
+
+
+@router.put("/courses/{course_id}")
+def update_course(course_id: int, payload: CourseIn, db: Db):
+    course = db.get(Course, course_id)
+    if not course:
+        raise HTTPException(404, "Course not found")
+    for key, value in payload.model_dump().items():
+        setattr(course, key, value)
     try:
         db.commit()
     except Exception:
@@ -128,6 +160,24 @@ def create_student(payload: StudentIn, db: Db):
     return {"id": student.id, "full_name": student.full_name, "email": student.email, "setup_email_sent": delivered, "development_setup_url": None if delivered else setup_url}
 
 
+@router.put("/students/{student_id}")
+def update_student(student_id: int, payload: StudentIn, db: Db):
+    student = db.get(Student, student_id)
+    if not student:
+        raise HTTPException(404, "Student not found")
+    if student.date_sheet_saved and payload.registration_number != student.registration_number:
+        raise HTTPException(409, "Registration number is locked after date-sheet save")
+    for key, value in payload.model_dump().items():
+        setattr(student, key, value)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(409, "Student email or registration number already exists")
+    db.refresh(student)
+    return student
+
+
 @router.delete("/students/{student_id}")
 def delete_student(student_id: int, db: Db):
     student = db.get(Student, student_id)
@@ -161,6 +211,35 @@ def create_schedule(payload: SlotIn, db: Db):
     db.commit()
     db.refresh(slot)
     return slot
+
+
+@router.put("/schedules/{slot_id}")
+def update_schedule(slot_id: int, payload: SlotIn, db: Db):
+    slot = db.get(ExamSlot, slot_id)
+    if not slot:
+        raise HTTPException(404, "Exam slot not found")
+    if slot.selected_count:
+        raise HTTPException(409, "Selected exam slots cannot be edited")
+    duplicate = db.scalar(select(ExamSlot).where(ExamSlot.id != slot_id, ExamSlot.course_id == payload.course_id, ExamSlot.exam_date == payload.exam_date, ExamSlot.start_time == payload.start_time))
+    if duplicate:
+        raise HTTPException(409, "Duplicate slot for this course")
+    for key, value in payload.model_dump().items():
+        setattr(slot, key, value)
+    db.commit()
+    db.refresh(slot)
+    return slot
+
+
+@router.delete("/schedules/{slot_id}")
+def delete_schedule(slot_id: int, db: Db):
+    slot = db.get(ExamSlot, slot_id)
+    if not slot:
+        raise HTTPException(404, "Exam slot not found")
+    if slot.selected_count:
+        raise HTTPException(409, "Selected exam slots cannot be deleted")
+    db.delete(slot)
+    db.commit()
+    return {"message": "Exam slot deleted"}
 
 
 @router.post("/requests", status_code=status.HTTP_201_CREATED)
