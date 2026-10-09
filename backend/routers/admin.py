@@ -152,3 +152,21 @@ def create_request(payload: RequestIn, db: Db):
     db.commit()
     db.refresh(request)
     return request
+
+
+@router.get("/requests")
+def list_requests(db: Db, paging: Annotated[tuple[int, int], Depends(pagination)], search: str = ""):
+    page, page_size = paging
+    needle = f"%{search.strip()}%"
+    query = select(
+        StudentRequest.id,
+        Student.full_name.label("student"),
+        StudentRequest.request_type.label("type"),
+        StudentRequest.reason,
+        StudentRequest.created_at.label("raised"),
+        StudentRequest.status,
+        StudentRequest.remark,
+    ).join(Student, Student.id == StudentRequest.student_id).where(
+        or_(Student.full_name.ilike(needle), StudentRequest.request_type.ilike(needle), StudentRequest.reason.ilike(needle), StudentRequest.status.ilike(needle))
+    ).order_by(StudentRequest.created_at.desc())
+    return page_result(query, db, page, page_size)
