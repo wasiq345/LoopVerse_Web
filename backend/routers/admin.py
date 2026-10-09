@@ -6,10 +6,14 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
-from backend.models import Branch, Course, ExamSlot, Student, StudentRequest
+from backend.core.email import send_password_setup_email
+from backend.core.config import settings
+from backend.core.security import require_role
+from backend.routers.auth import issue_setup_token
+from backend.models import Assignment, Branch, Course, ExamSlot, Student, StudentRequest
 from backend.schemas import BranchIn, CourseIn, RequestIn, SlotIn, StudentIn
 
-router = APIRouter(prefix="/api", tags=["admin"])
+router = APIRouter(prefix="/api", tags=["admin"], dependencies=[Depends(require_role("admin"))])
 Db = Annotated[Session, Depends(get_db)]
 
 
@@ -84,6 +88,22 @@ def create_course(payload: CourseIn, db: Db):
     return course
 
 
+@router.delete("/courses/{course_id}")
+def delete_course(course_id: int, db: Db):
+    course = db.get(Course, course_id)
+    if not course:
+        raise HTTPException(404, "Course not found")
+    assignment_count = db.scalar(select(func.count()).select_from(Assignment).where(Assignment.course_id == course_id)) or 0
+    slot_count = db.scalar(select(func.count()).select_from(ExamSlot).where(ExamSlot.course_id == course_id)) or 0
+    if assignment_count or slot_count:
+        course.active = False
+        db.commit()
+        return {"message": "Course is in use and was marked inactive instead"}
+    db.delete(course)
+    db.commit()
+    return {"message": "Course deleted"}
+
+
 @router.get("/students")
 def list_students(db: Db, paging: Annotated[tuple[int, int], Depends(pagination)], search: str = ""):
     page, page_size = paging
@@ -95,6 +115,7 @@ def list_students(db: Db, paging: Annotated[tuple[int, int], Depends(pagination)
 @router.post("/students", status_code=status.HTTP_201_CREATED)
 def create_student(payload: StudentIn, db: Db):
     student = Student(**payload.model_dump())
+    setup_token = issue_setup_token(student)
     db.add(student)
     try:
         db.commit()
@@ -102,7 +123,9 @@ def create_student(payload: StudentIn, db: Db):
         db.rollback()
         raise HTTPException(409, "Student email or registration number already exists")
     db.refresh(student)
-    return student
+    setup_url = f"{settings.app_url}/setup-password?student_id={student.id}&token={setup_token}"
+    delivered = send_password_setup_email(student.email, student.full_name, setup_url)
+    return {"id": student.id, "full_name": student.full_name, "email": student.email, "setup_email_sent": delivered, "development_setup_url": None if delivered else setup_url}
 
 
 @router.delete("/students/{student_id}")

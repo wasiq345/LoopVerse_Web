@@ -37,6 +37,15 @@ def portal(student_id: int, db: Db):
     return {"student": {"id": student.id, "name": student.full_name, "email": student.email, "registration": student.registration_number, "program": student.program, "semester": student.semester, "branch": {"id": student.branch.id, "name": student.branch.name, "city": student.branch.city} if student.branch else None, "date_sheet_saved": student.date_sheet_saved}, "branches": [{"id": branch.id, "name": branch.name, "code": branch.code, "city": branch.city, "address": branch.address} for branch in db.scalars(select(Branch).where(Branch.active.is_(True)).order_by(Branch.name)).all()], "courses": courses, "selections": [{"course_id": item.course_id, "slot_id": item.slot_id} for item in selections]}
 
 
+@router.get("/{student_id}/date-sheet/print")
+def print_date_sheet(student_id: int, db: Db):
+    student = get_student(student_id, db)
+    if not student.date_sheet_saved:
+        raise HTTPException(409, "Date sheet has not been saved")
+    selections = db.scalars(select(DateSheetSelection).where(DateSheetSelection.student_id == student_id)).all()
+    return {"student": student.full_name, "registration": student.registration_number, "program": student.program, "branch": student.branch.name if student.branch else None, "rows": [{"code": item.slot.course.code, "title": item.slot.course.title, "date": item.slot.exam_date, "start_time": item.slot.start_time, "end_time": item.slot.end_time} for item in sorted(selections, key=lambda item: (item.slot.exam_date, item.slot.start_time))]}
+
+
 @router.post("/{student_id}/branch", status_code=status.HTTP_200_OK)
 def choose_branch(student_id: int, payload: BranchChoice, db: Db):
     student = get_student(student_id, db)
