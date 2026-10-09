@@ -281,6 +281,19 @@ def create_student(payload: StudentIn, db: Db):
     return student
 
 
+@app.delete("/api/students/{student_id}")
+def delete_student(student_id: int, db: Db):
+    student = db.get(Student, student_id)
+    if not student:
+        raise HTTPException(404, "Student not found")
+    if student.date_sheet_saved:
+        raise HTTPException(409, "Students with a saved date sheet cannot be deleted")
+    db.query(StudentRequest).filter(StudentRequest.student_id == student_id).delete()
+    db.delete(student)
+    db.commit()
+    return {"message": "Student deleted"}
+
+
 @app.get("/api/schedules", response_model=Page)
 def list_schedules(db: Db, paging_params: Annotated[tuple[int, int], Depends(paging)], search: str = ""):
     page, page_size = paging_params
