@@ -12,7 +12,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, rela
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./exam_slot.db"
-    frontend_url: str = "http://localhost:5173"
+    frontend_url: str = "http://localhost:5173,http://127.0.0.1:5173"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
@@ -163,7 +163,14 @@ class Page(BaseModel):
 
 
 app = FastAPI(title="ExamSlot API", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in settings.frontend_url.split(",")],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d+\.\d+\.\d+)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def get_db():
