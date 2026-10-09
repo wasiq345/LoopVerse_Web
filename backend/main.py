@@ -2,12 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.config import settings
-from backend.core.database import Base, engine
-from backend.routers import admin, student
+from backend.core.database import Base, engine, upgrade_legacy_schema
+from backend.routers import admin, admin_actions, assignments, auth, student
 
 from backend import models  # noqa: F401, E402
 
 Base.metadata.create_all(engine)
+upgrade_legacy_schema()
 
 app = FastAPI(title="ExamSlot API", version="1.0.0")
 app.add_middleware(
@@ -27,3 +28,6 @@ def health_check() -> dict[str, str]:
 
 app.include_router(admin.router)
 app.include_router(student.router)
+app.include_router(auth.router)
+app.include_router(assignments.router)
+app.include_router(admin_actions.router)

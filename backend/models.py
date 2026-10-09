@@ -43,6 +43,9 @@ class Student(Base):
     branch: Mapped[Branch | None] = relationship(back_populates="students")
     assignments: Mapped[list["Assignment"]] = relationship(cascade="all, delete-orphan")
     date_sheet_saved: Mapped[bool] = mapped_column(Boolean, default=False)
+    password_hash: Mapped[str] = mapped_column(String(255), default="")
+    password_setup_token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_setup_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Assignment(Base):
@@ -89,3 +92,12 @@ class StudentRequest(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")
     remark: Mapped[str] = mapped_column(String(1000), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    unlock_used: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(160))
+    password_hash: Mapped[str] = mapped_column(String(255))
